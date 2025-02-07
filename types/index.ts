@@ -35,4 +35,5 @@ export interface TestReport {
   };
   totalAttempts: number;
   averageTimePerQuestion: number;
+  revisionNeeded: Array<{ topic: string; level: string }>;
 }

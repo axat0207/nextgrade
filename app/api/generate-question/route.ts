@@ -30,10 +30,16 @@ const requestSchema = z.object({
 
 let usedQuestionIds = new Set<string>();
 
-// Clear used questions periodically to prevent memory buildup
 setInterval(() => {
   usedQuestionIds = new Set();
-}, 24 * 60 * 60 * 1000); // Clear every 24 hours
+}, 24 * 60 * 60 * 1000);
+
+function formatMathContent(text: string): string {
+  return text
+    .replace(/\\\(|\\\)/g, "") // Remove LaTeX delimiters
+    .replace(/\*/g, "×") // Replace * with ×
+    .trim();
+}
 
 export async function POST(req: Request) {
   try {
@@ -47,10 +53,7 @@ export async function POST(req: Request) {
 
     const validationResult = requestSchema.safeParse(body);
     if (!validationResult.success) {
-      return NextResponse.json(
-        { error: "Validation failed", details: validationResult.error.issues },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Validation failed" }, { status: 400 });
     }
 
     const { subject, grade, topic, level } = validationResult.data;
@@ -71,21 +74,20 @@ export async function POST(req: Request) {
       " "
     )} difficulty ${normalizedSubject} question for grade ${grade} students.
     Main Topic: ${normalizedTopic}
-        Subtopics: ${(
-          subjectData[normalizedTopic as keyof typeof subjectData] as string[]
-        ).join(", ")}
+       Subtopics: ${(
+         subjectData[normalizedTopic as keyof typeof subjectData] as string[]
+       ).join(", ")}
     
     Requirements:
-    - Generate unique values/numbers
-    - Question must require logical thinking
-    - Options must be plausible but distinct
-    - Format mathematical equations using LaTeX
-    - Ensure answer accuracy
+    - Do not use LaTeX delimiters (\\( and \\))
+    - Use × instead of * for multiplication
+    - Keep mathematical expressions simple and readable
+    - Provide clear, step-by-step explanations
     
-    Return ONLY valid JSON with this structure:
+    Return ONLY JSON:
     {
       "id": "unique-uuid",
-      "questionText": "clear question statement",
+      "questionText": "question without LaTeX delimiters",
       "options": ["option1", "option2", "option3", "option4"],
       "correctAnswer": "exact matching option",
       "hint": "helpful clue without direct answer",
@@ -97,9 +99,8 @@ export async function POST(req: Request) {
 
     let questionData: Question | null = null;
     let retryCount = 0;
-    const maxRetries = 3;
 
-    while (!questionData && retryCount < maxRetries) {
+    while (!questionData && retryCount < 3) {
       try {
         const completion = await openai.chat.completions.create({
           model: "gpt-4o",
@@ -107,7 +108,7 @@ export async function POST(req: Request) {
             {
               role: "system",
               content:
-                "You are a specialized education AI focused on generating accurate assessment questions. Return only valid JSON.",
+                "You are an education AI. Return valid JSON with clean mathematical formatting.",
             },
             { role: "user", content: prompt },
           ],
@@ -127,6 +128,10 @@ export async function POST(req: Request) {
         }
 
         parsedData.id = uniqueId;
+        parsedData.questionText = formatMathContent(parsedData.questionText);
+        parsedData.options = parsedData.options.map(formatMathContent);
+        parsedData.correctAnswer = formatMathContent(parsedData.correctAnswer);
+        parsedData.explanation = formatMathContent(parsedData.explanation);
 
         if (validateQuestion(parsedData)) {
           questionData = parsedData;
@@ -134,21 +139,19 @@ export async function POST(req: Request) {
           break;
         }
       } catch (err) {
-        console.error(`Attempt ${retryCount + 1} failed:`, err);
         retryCount++;
       }
     }
 
     if (!questionData) {
       return NextResponse.json(
-        { error: "Failed to generate valid question after multiple attempts" },
+        { error: "Failed to generate valid question" },
         { status: 500 }
       );
     }
 
     return NextResponse.json(questionData);
   } catch (error) {
-    console.error("API Error:", error);
     return NextResponse.json(
       { error: "An unexpected error occurred" },
       { status: 500 }

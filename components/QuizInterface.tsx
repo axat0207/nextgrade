@@ -52,15 +52,14 @@ export default function QuizInterface({
   );
   const [consecutiveCorrect, setConsecutiveCorrect] = useState(0);
   const [difficultyLevel, setDifficultyLevel] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [attemptCount, setAttemptCount] = useState(0);
-  const [askedQuestions, setAskedQuestions] = useState<Set<string>>(new Set());
   const [testCompleted, setTestCompleted] = useState(false);
   const [isAnswerProcessing, setIsAnswerProcessing] = useState(false);
 
   const isMounted = useRef(true);
   const abortController = useRef<AbortController | null>(null);
+  const questionStartTime = useRef(Date.now());
 
   const [testReport, setTestReport] = useState<TestReport>({
     totalQuestions: 0,
@@ -72,17 +71,24 @@ export default function QuizInterface({
     topicStats: {},
     totalAttempts: 0,
     averageTimePerQuestion: 0,
+    revisionNeeded: [],
+  });
+
+  const [currentQuestionStats, setCurrentQuestionStats] = useState({
+    attempts: 0,
+    hintUsed: false,
   });
 
   const fetchNextQuestion = useCallback(async () => {
-    if (!isMounted.current || testCompleted || isAnswerProcessing) return;
+    if (!isMounted.current || testCompleted) return;
 
     setIsLoading(true);
     setError(null);
     setSelectedAnswer(null);
     setShowHint(false);
     setShowExplanation(false);
-    setAttemptCount(0);
+    setCurrentQuestionStats({ attempts: 0, hintUsed: false });
+    questionStartTime.current = Date.now();
 
     if (abortController.current) {
       abortController.current.abort();
@@ -109,11 +115,6 @@ export default function QuizInterface({
       }
 
       const data = await response.json();
-      if (askedQuestions.has(data.id)) {
-        return fetchNextQuestion();
-      }
-
-      setAskedQuestions((prev) => new Set(prev).add(data.id));
       setCurrentQuestion(data);
       setTestReport((prev) => ({
         ...prev,
@@ -130,15 +131,7 @@ export default function QuizInterface({
         setIsLoading(false);
       }
     }
-  }, [
-    subject,
-    grade,
-    currentTopic,
-    difficultyLevel,
-    askedQuestions,
-    testCompleted,
-    isAnswerProcessing,
-  ]);
+  }, [subject, grade, currentTopic, difficultyLevel, testCompleted]);
 
   useEffect(() => {
     isMounted.current = true;
@@ -156,13 +149,10 @@ export default function QuizInterface({
       timeRemaining > 0 &&
       !testCompleted &&
       setInterval(() => {
-        setTimeRemaining((prev) => {
-          const newValue = Math.max(0, prev - 1);
-          if (newValue === 0) setTestCompleted(true);
-          return newValue;
-        });
+        setTimeRemaining((prev) => Math.max(0, prev - 1));
       }, 1000);
 
+    if (timeRemaining === 0) setTestCompleted(true);
     return () => {
       if (timer) clearInterval(timer);
     };
@@ -173,49 +163,58 @@ export default function QuizInterface({
       if (!currentQuestion || testCompleted || isAnswerProcessing) return;
 
       setIsAnswerProcessing(true);
-      setSelectedAnswer(answer);
       const isCorrect = answer === currentQuestion.correctAnswer;
-      const timeSpent = TEST_DURATION_MINUTES * 60 - timeRemaining;
+      const timeSpent = Math.floor(
+        (Date.now() - questionStartTime.current) / 1000
+      );
 
-      setTestReport((prev) => {
-        const newStats = { ...prev.topicStats };
-        const topicStat = newStats[currentTopic] || {
-          total: 0,
-          correct: 0,
-          totalAttempts: 0,
-          totalTime: 0,
-          hintsUsed: 0,
-        };
-
-        topicStat.total++;
-        topicStat.totalAttempts += attemptCount + 1;
-        topicStat.totalTime += timeSpent;
-        topicStat.hintsUsed += showHint ? 1 : 0;
-        if (isCorrect) topicStat.correct++;
-
-        return {
-          ...prev,
-          correctAnswers: prev.correctAnswers + (isCorrect ? 1 : 0),
-          hintsUsed: prev.hintsUsed + (showHint ? 1 : 0),
-          totalAttempts: prev.totalAttempts + attemptCount + 1,
-          timeTaken: prev.timeTaken + timeSpent,
-          averageTimePerQuestion:
-            (prev.timeTaken + timeSpent) / (prev.totalQuestions + 1),
-          questionsData: [
-            ...prev.questionsData,
-            {
-              questionId: currentQuestion.id,
-              topic: currentQuestion.topic,
-              attemptsNeeded: attemptCount + 1,
-              hintUsed: showHint,
-              timeTaken: timeSpent,
-            },
-          ],
-          topicStats: { ...newStats, [currentTopic]: topicStat },
-        };
-      });
+      setCurrentQuestionStats((prev) => ({
+        attempts: prev.attempts + 1,
+        hintUsed: prev.hintUsed || showHint,
+      }));
 
       if (isCorrect) {
+        setSelectedAnswer(answer);
+        setTestReport((prev) => {
+          const newStats = { ...prev.topicStats };
+          const topicStat = newStats[currentTopic] || {
+            total: 0,
+            correct: 0,
+            totalAttempts: 0,
+            totalTime: 0,
+            hintsUsed: 0,
+          };
+
+          topicStat.total++;
+          topicStat.correct++;
+          topicStat.totalAttempts += currentQuestionStats.attempts + 1;
+          topicStat.totalTime += timeSpent;
+          topicStat.hintsUsed += currentQuestionStats.hintUsed ? 1 : 0;
+
+          return {
+            ...prev,
+            correctAnswers: prev.correctAnswers + 1,
+            hintsUsed: prev.hintsUsed + (currentQuestionStats.hintUsed ? 1 : 0),
+            totalAttempts:
+              prev.totalAttempts + currentQuestionStats.attempts + 1,
+            timeTaken: prev.timeTaken + timeSpent,
+            averageTimePerQuestion:
+              (prev.timeTaken + timeSpent) / (prev.totalQuestions + 1),
+            questionsData: [
+              ...prev.questionsData,
+              {
+                questionId: currentQuestion.id,
+                topic: currentQuestion.topic,
+                attemptsNeeded: currentQuestionStats.attempts + 1,
+                hintUsed: currentQuestionStats.hintUsed,
+                timeTaken: timeSpent,
+                correct: true,
+              },
+            ],
+            topicStats: { ...newStats, [currentTopic]: topicStat },
+          };
+        });
+
         setConsecutiveCorrect((prev) => {
           const newCount = prev + 1;
           if (newCount >= CONSECUTIVE_TOPIC_CHANGE) {
@@ -236,28 +235,63 @@ export default function QuizInterface({
           fetchNextQuestion();
         }, 1500);
       } else {
-        setConsecutiveCorrect(0);
-        setDifficultyLevel(0);
-        setAttemptCount((prev) => prev + 1);
-
-        if (attemptCount === 0) {
+        const newAttempts = currentQuestionStats.attempts + 1;
+        if (newAttempts === 1) {
           setShowHint(true);
+          setIsAnswerProcessing(false);
         } else {
+          setSelectedAnswer(answer);
           setShowExplanation(true);
+          setTestReport((prev) => {
+            const newStats = { ...prev.topicStats };
+            const topicStat = newStats[currentTopic] || {
+              total: 0,
+              correct: 0,
+              totalAttempts: 0,
+              totalTime: 0,
+              hintsUsed: 0,
+            };
+
+            topicStat.total++;
+            topicStat.totalAttempts += newAttempts;
+            topicStat.totalTime += timeSpent;
+            topicStat.hintsUsed += currentQuestionStats.hintUsed ? 1 : 0;
+
+            return {
+              ...prev,
+              hintsUsed:
+                prev.hintsUsed + (currentQuestionStats.hintUsed ? 1 : 0),
+              totalAttempts: prev.totalAttempts + newAttempts,
+              timeTaken: prev.timeTaken + timeSpent,
+              averageTimePerQuestion:
+                (prev.timeTaken + timeSpent) / (prev.totalQuestions + 1),
+              questionsData: [
+                ...prev.questionsData,
+                {
+                  questionId: currentQuestion.id,
+                  topic: currentQuestion.topic,
+                  attemptsNeeded: newAttempts,
+                  hintUsed: currentQuestionStats.hintUsed,
+                  timeTaken: timeSpent,
+                  correct: false,
+                },
+              ],
+              topicStats: { ...newStats, [currentTopic]: topicStat },
+            };
+          });
+          setIsAnswerProcessing(false);
         }
-        setIsAnswerProcessing(false);
       }
     },
     [
       currentQuestion,
-      attemptCount,
-      showHint,
       currentTopic,
       subject,
       fetchNextQuestion,
       testCompleted,
-      timeRemaining,
       isAnswerProcessing,
+      currentQuestionStats,
+      showHint,
     ]
   );
 
