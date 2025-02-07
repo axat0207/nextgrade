@@ -28,16 +28,26 @@ const requestSchema = z.object({
   level: z.enum(["very_easy", "easy", "medium", "hard"]),
 });
 
-let usedQuestionIds = new Set<string>();
+// Global cache for used questions
+const usedQuestionCache = new Map<string, Set<string>>();
 
+// Reset the cache every 24 hours
 setInterval(() => {
-  usedQuestionIds = new Set();
+  usedQuestionCache.clear();
 }, 24 * 60 * 60 * 1000);
 
 function formatMathContent(text: string): string {
   return text
     .replace(/\\\(|\\\)/g, "") // Remove LaTeX delimiters
     .replace(/\*/g, "×") // Replace * with ×
+    .trim();
+}
+
+function normalizeQuestionContent(content: string): string {
+  return content
+    .toLowerCase()
+    .replace(/[^a-z0-9\s×]/g, "") // Remove special characters
+    .replace(/\s+/g, " ") // Normalize spaces
     .trim();
 }
 
@@ -68,6 +78,12 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
+
+    // Initialize cache for the topic if it doesn't exist
+    if (!usedQuestionCache.has(normalizedTopic)) {
+      usedQuestionCache.set(normalizedTopic, new Set());
+    }
+    const topicCache = usedQuestionCache.get(normalizedTopic)!;
 
     const prompt = `Create a ${level.replace(
       "_",
@@ -100,7 +116,7 @@ export async function POST(req: Request) {
     let questionData: Question | null = null;
     let retryCount = 0;
 
-    while (!questionData && retryCount < 3) {
+    while (!questionData && retryCount < 5) {
       try {
         const completion = await openai.chat.completions.create({
           model: "gpt-4o",
@@ -122,7 +138,11 @@ export async function POST(req: Request) {
         const parsedData = JSON.parse(content);
         const uniqueId = crypto.randomUUID();
 
-        if (usedQuestionIds.has(uniqueId)) {
+        // Normalize and check for duplicate content
+        const normalizedQuestionText = normalizeQuestionContent(
+          parsedData.questionText
+        );
+        if (topicCache.has(normalizedQuestionText)) {
           retryCount++;
           continue;
         }
@@ -135,7 +155,7 @@ export async function POST(req: Request) {
 
         if (validateQuestion(parsedData)) {
           questionData = parsedData;
-          usedQuestionIds.add(uniqueId);
+          topicCache.add(normalizedQuestionText); // Add to cache
           break;
         }
       } catch (err) {
