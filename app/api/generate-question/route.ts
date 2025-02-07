@@ -126,10 +126,10 @@ export async function POST(req: Request) {
               content:
                 "You are an education AI. Return valid JSON with clean mathematical formatting.",
             },
-          { role: "user", content: prompt },
+            { role: "user", content: prompt },
           ],
           temperature: 0.7,
-          max_tokens: 512,
+          max_tokens: 1024,
           response_format: { type: "json_object" },
         });
 
