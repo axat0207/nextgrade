@@ -79,6 +79,13 @@ export default function QuizInterface({
     hintUsed: false,
   });
 
+  useEffect(() => {
+    if (showHint && !currentQuestionStats.hintUsed) {
+      setTestReport((prev) => ({ ...prev, hintsUsed: prev.hintsUsed + 1 }));
+      setCurrentQuestionStats((prev) => ({ ...prev, hintUsed: true }));
+    }
+  }, [showHint, currentQuestionStats.hintUsed]);
+
   const fetchNextQuestion = useCallback(async () => {
     if (!isMounted.current || testCompleted) return;
 
@@ -158,23 +165,89 @@ export default function QuizInterface({
     };
   }, [timeRemaining, testCompleted]);
 
-  const handleAnswer = useCallback(
-    (answer: string) => {
-      if (!currentQuestion || testCompleted || isAnswerProcessing) return;
+  const handleSubmit = useCallback(() => {
+    if (
+      !currentQuestion ||
+      testCompleted ||
+      isAnswerProcessing ||
+      !selectedAnswer
+    )
+      return;
 
-      setIsAnswerProcessing(true);
-      const isCorrect = answer === currentQuestion.correctAnswer;
-      const timeSpent = Math.floor(
-        (Date.now() - questionStartTime.current) / 1000
-      );
+    setIsAnswerProcessing(true);
+    const isCorrect = selectedAnswer === currentQuestion.correctAnswer;
+    const timeSpent = Math.floor(
+      (Date.now() - questionStartTime.current) / 1000
+    );
 
-      setCurrentQuestionStats((prev) => ({
-        attempts: prev.attempts + 1,
-        hintUsed: prev.hintUsed || showHint,
-      }));
+    setCurrentQuestionStats((prev) => ({
+      attempts: prev.attempts + 1,
+      hintUsed: prev.hintUsed,
+    }));
 
-      if (isCorrect) {
-        setSelectedAnswer(answer);
+    if (isCorrect) {
+      // Inside handleSubmit function
+      setTestReport((prev) => {
+        const newStats = { ...prev.topicStats };
+        const topicStat = newStats[currentTopic] || {
+          total: 0,
+          correct: 0,
+          totalAttempts: 0,
+          totalTime: 0,
+          hintsUsed: 0,
+        };
+
+        topicStat.total++;
+        topicStat.correct += isCorrect ? 1 : 0;
+        topicStat.totalAttempts += currentQuestionStats.attempts + 1;
+        topicStat.totalTime += timeSpent;
+        topicStat.hintsUsed += currentQuestionStats.hintUsed ? 1 : 0;
+
+        return {
+          ...prev,
+          correctAnswers: prev.correctAnswers + (isCorrect ? 1 : 0),
+          hintsUsed: prev.hintsUsed + (currentQuestionStats.hintUsed ? 1 : 0),
+          totalAttempts: prev.totalAttempts + currentQuestionStats.attempts + 1,
+          timeTaken: prev.timeTaken + timeSpent,
+          averageTimePerQuestion:
+            (prev.timeTaken + timeSpent) / (prev.totalQuestions + 1),
+          questionsData: [
+            ...prev.questionsData,
+            {
+              questionId: currentQuestion.id,
+              topic: currentQuestion.topic,
+              attemptsNeeded: currentQuestionStats.attempts + 1,
+              hintUsed: currentQuestionStats.hintUsed,
+              timeTaken: timeSpent,
+              correct: isCorrect,
+              difficulty: DIFFICULTY_LEVELS[difficultyLevel],
+            },
+          ],
+          topicStats: { ...newStats, [currentTopic]: topicStat },
+        };
+      });
+
+      setConsecutiveCorrect((prev) => {
+        const newCount = prev + 1;
+        if (newCount >= CONSECUTIVE_TOPIC_CHANGE) {
+          setCurrentTopic((prevTopic) => {
+            const topics = SUBJECT_CONFIG[subject].topics;
+            const nextIndex = (topics.indexOf(prevTopic) + 1) % topics.length;
+            return topics[nextIndex];
+          });
+          setDifficultyLevel(0);
+          return 0;
+        }
+        setDifficultyLevel(Math.min(newCount, DIFFICULTY_LEVELS.length - 1));
+        return newCount;
+      });
+
+      setShowExplanation(true);
+    } else {
+      const newAttempts = currentQuestionStats.attempts + 1;
+      if (newAttempts === 1) {
+        setShowHint(true);
+      } else {
         setTestReport((prev) => {
           const newStats = { ...prev.topicStats };
           const topicStat = newStats[currentTopic] || {
@@ -186,17 +259,14 @@ export default function QuizInterface({
           };
 
           topicStat.total++;
-          topicStat.correct++;
-          topicStat.totalAttempts += currentQuestionStats.attempts + 1;
+          topicStat.totalAttempts += newAttempts;
           topicStat.totalTime += timeSpent;
           topicStat.hintsUsed += currentQuestionStats.hintUsed ? 1 : 0;
 
           return {
             ...prev,
-            correctAnswers: prev.correctAnswers + 1,
             hintsUsed: prev.hintsUsed + (currentQuestionStats.hintUsed ? 1 : 0),
-            totalAttempts:
-              prev.totalAttempts + currentQuestionStats.attempts + 1,
+            totalAttempts: prev.totalAttempts + newAttempts,
             timeTaken: prev.timeTaken + timeSpent,
             averageTimePerQuestion:
               (prev.timeTaken + timeSpent) / (prev.totalQuestions + 1),
@@ -205,95 +275,29 @@ export default function QuizInterface({
               {
                 questionId: currentQuestion.id,
                 topic: currentQuestion.topic,
-                attemptsNeeded: currentQuestionStats.attempts + 1,
+                attemptsNeeded: newAttempts,
                 hintUsed: currentQuestionStats.hintUsed,
                 timeTaken: timeSpent,
-                correct: true,
+                correct: false,
+                difficulty: DIFFICULTY_LEVELS[difficultyLevel],
               },
             ],
             topicStats: { ...newStats, [currentTopic]: topicStat },
           };
         });
-
-        setConsecutiveCorrect((prev) => {
-          const newCount = prev + 1;
-          if (newCount >= CONSECUTIVE_TOPIC_CHANGE) {
-            setCurrentTopic((prevTopic) => {
-              const topics = SUBJECT_CONFIG[subject].topics;
-              const nextIndex = (topics.indexOf(prevTopic) + 1) % topics.length;
-              return topics[nextIndex];
-            });
-            setDifficultyLevel(0);
-            return 0;
-          }
-          setDifficultyLevel(Math.min(newCount, DIFFICULTY_LEVELS.length - 1));
-          return newCount;
-        });
-
-        setTimeout(() => {
-          setIsAnswerProcessing(false);
-          fetchNextQuestion();
-        }, 1500);
-      } else {
-        const newAttempts = currentQuestionStats.attempts + 1;
-        if (newAttempts === 1) {
-          setShowHint(true);
-          setIsAnswerProcessing(false);
-        } else {
-          setSelectedAnswer(answer);
-          setShowExplanation(true);
-          setTestReport((prev) => {
-            const newStats = { ...prev.topicStats };
-            const topicStat = newStats[currentTopic] || {
-              total: 0,
-              correct: 0,
-              totalAttempts: 0,
-              totalTime: 0,
-              hintsUsed: 0,
-            };
-
-            topicStat.total++;
-            topicStat.totalAttempts += newAttempts;
-            topicStat.totalTime += timeSpent;
-            topicStat.hintsUsed += currentQuestionStats.hintUsed ? 1 : 0;
-
-            return {
-              ...prev,
-              hintsUsed:
-                prev.hintsUsed + (currentQuestionStats.hintUsed ? 1 : 0),
-              totalAttempts: prev.totalAttempts + newAttempts,
-              timeTaken: prev.timeTaken + timeSpent,
-              averageTimePerQuestion:
-                (prev.timeTaken + timeSpent) / (prev.totalQuestions + 1),
-              questionsData: [
-                ...prev.questionsData,
-                {
-                  questionId: currentQuestion.id,
-                  topic: currentQuestion.topic,
-                  attemptsNeeded: newAttempts,
-                  hintUsed: currentQuestionStats.hintUsed,
-                  timeTaken: timeSpent,
-                  correct: false,
-                },
-              ],
-              topicStats: { ...newStats, [currentTopic]: topicStat },
-            };
-          });
-          setIsAnswerProcessing(false);
-        }
+        setShowExplanation(true);
       }
-    },
-    [
-      currentQuestion,
-      currentTopic,
-      subject,
-      fetchNextQuestion,
-      testCompleted,
-      isAnswerProcessing,
-      currentQuestionStats,
-      showHint,
-    ]
-  );
+    }
+    setIsAnswerProcessing(false);
+  }, [
+    currentQuestion,
+    currentTopic,
+    subject,
+    testCompleted,
+    isAnswerProcessing,
+    selectedAnswer,
+    currentQuestionStats,
+  ]);
 
   const handleNextQuestion = useCallback(() => {
     setShowExplanation(false);
@@ -349,15 +353,19 @@ export default function QuizInterface({
                 {currentQuestion.options.map((option) => (
                   <Button
                     key={option}
-                    onClick={() => handleAnswer(option)}
-                    disabled={!!selectedAnswer || isAnswerProcessing}
+                    onClick={() => setSelectedAnswer(option)}
                     variant={
-                      selectedAnswer === option
+                      showExplanation
                         ? option === currentQuestion.correctAnswer
                           ? "default"
-                          : "destructive"
+                          : option === selectedAnswer
+                          ? "destructive"
+                          : "outline"
+                        : selectedAnswer === option
+                        ? "secondary"
                         : "outline"
                     }
+                    disabled={showExplanation}
                     className="p-4 text-lg"
                   >
                     <span dangerouslySetInnerHTML={{ __html: option }} />
@@ -365,17 +373,50 @@ export default function QuizInterface({
                 ))}
               </div>
 
+              {!showExplanation && (
+                <div className="mt-4 flex gap-2">
+                  <Button
+                    onClick={() => setShowHint(true)}
+                    disabled={showHint || !!selectedAnswer}
+                    variant="outline"
+                  >
+                    Show Hint
+                  </Button>
+                  {selectedAnswer && (
+                    <>
+                      <Button
+                        onClick={handleSubmit}
+                        disabled={isAnswerProcessing}
+                      >
+                        Submit Answer
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => setSelectedAnswer(null)}
+                        disabled={isAnswerProcessing}
+                      >
+                        Clear Selection
+                      </Button>
+                    </>
+                  )}
+                </div>
+              )}
+
               {showHint && (
                 <Alert className="mt-4">
-                  <AlertDescription
-                    dangerouslySetInnerHTML={{ __html: currentQuestion.hint }}
-                  />
+                  <AlertDescription>
+                    <strong>Hint:</strong>{" "}
+                    <span
+                      dangerouslySetInnerHTML={{ __html: currentQuestion.hint }}
+                    />
+                  </AlertDescription>
                 </Alert>
               )}
 
               {showExplanation && (
                 <Alert className="mt-4">
                   <AlertDescription>
+                    <strong>Explanation:</strong>{" "}
                     <div
                       dangerouslySetInnerHTML={{
                         __html: currentQuestion.explanation,

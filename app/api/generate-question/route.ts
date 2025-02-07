@@ -119,16 +119,17 @@ export async function POST(req: Request) {
     while (!questionData && retryCount < 5) {
       try {
         const completion = await openai.chat.completions.create({
-          model: "gpt-4o",
+          model: "gpt-4o-mini",
           messages: [
             {
               role: "system",
               content:
                 "You are an education AI. Return valid JSON with clean mathematical formatting.",
             },
-            { role: "user", content: prompt },
+          { role: "user", content: prompt },
           ],
           temperature: 0.7,
+          max_tokens: 512,
           response_format: { type: "json_object" },
         });
 
@@ -169,9 +170,10 @@ export async function POST(req: Request) {
         { status: 500 }
       );
     }
-
+    console.log({ questionData });
     return NextResponse.json(questionData);
   } catch (error) {
+    console.log(error);
     return NextResponse.json(
       { error: "An unexpected error occurred" },
       { status: 500 }

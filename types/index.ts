@@ -11,21 +11,24 @@ export interface Question {
   grade: number;
 }
 
+// types.ts (or wherever your types are defined)
 export interface TestReport {
   totalQuestions: number;
   correctAnswers: number;
   hintsUsed: number;
   timeTaken: number;
   topicsCompleted: string[];
-  questionsData: Array<{
+  questionsData: {
     questionId: string;
     topic: string;
     attemptsNeeded: number;
     hintUsed: boolean;
     timeTaken: number;
-  }>;
+    correct: boolean; // Add this
+    difficulty: string; // Add this
+  }[];
   topicStats: {
-    [key: string]: {
+    [topic: string]: {
       total: number;
       correct: number;
       totalAttempts: number;
@@ -35,5 +38,5 @@ export interface TestReport {
   };
   totalAttempts: number;
   averageTimePerQuestion: number;
-  revisionNeeded: Array<{ topic: string; level: string }>;
+  revisionNeeded: string[];
 }
