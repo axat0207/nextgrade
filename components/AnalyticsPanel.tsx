@@ -57,17 +57,44 @@ export default function AnalyticsPanel({ testReport }: AnalyticsPanelProps) {
       <div className="mb-6">
         <h3 className="font-medium mb-2">Topic Performance</h3>
         <BarChart
-          xAxis={[{ scaleType: "band", data: topicStats.map((t) => t.topic) }]}
-          series={[
-            { data: topicStats.map((t) => t.accuracy), label: "Accuracy (%)" },
-            { data: topicStats.map((t) => t.hintsUsed), label: "Hints Used" },
-            {
-              data: topicStats.map((t) => incorrectCounts[t.topic] || 0),
-              label: "Incorrect Questions",
-            },
-          ]}
-          height={300}
-        />
+      xAxis={[{ 
+        scaleType: "band", 
+        data: topicStats.map((t) => t.topic),
+        tickLabelStyle: {
+          angle: 0,
+          textAnchor: 'middle',
+        }
+      }]}
+      series={[
+        { 
+          data: topicStats.map((t) => t.accuracy), 
+          label: "Accuracy (%)",
+          // Add spacing between bars
+          // barGap: 8,
+          // Add spacing between groups
+          // groupSpacing: 16
+        },
+        { 
+          data: topicStats.map((t) => t.hintsUsed), 
+          label: "Hints Used",
+          // barGap: 8,
+          // groupSpacing: 16
+        },
+        {
+          data: topicStats.map((t) => incorrectCounts[t.topic] || 0),
+          label: "Incorrect Questions",
+          // barGap: 8,
+          // groupSpacing: 16
+        },
+      ]}
+      height={250}
+      // Add margin to ensure labels are visible
+      margin={{ left: 50, right: 50, top: 80, bottom: 30 }}
+      // Add space between bars within the same group
+      // barGap={8}
+      // Add space between groups of bars
+      // groupSpacing={16}
+    />
       </div>
 
       {/* Accuracy Pie Chart */}

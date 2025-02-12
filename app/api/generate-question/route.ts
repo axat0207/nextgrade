@@ -119,7 +119,7 @@ export async function POST(req: Request) {
     while (!questionData && retryCount < 5) {
       try {
         const completion = await openai.chat.completions.create({
-          model: "gpt-4o-mini",
+          model: "gpt-4o",
           messages: [
             {
               role: "system",
@@ -173,7 +173,7 @@ export async function POST(req: Request) {
     console.log({ questionData });
     return NextResponse.json(questionData);
   } catch (error) {
-    console.log(error);
+    console.log({error});
     return NextResponse.json(
       { error: "An unexpected error occurred" },
       { status: 500 }

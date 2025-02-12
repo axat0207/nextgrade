@@ -3,14 +3,11 @@ import { Question, TestReport } from "@/types";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import {
-  TEST_DURATION_MINUTES,
-  CONSECUTIVE_TOPIC_CHANGE,
-} from "@/config/constants";
+import { TEST_DURATION_MINUTES } from "@/config/constants";
 import { Loader2 } from "lucide-react";
 import AnalyticsPanel from "@/components/AnalyticsPanel";
 
-const DIFFICULTY_LEVELS = ["very_easy", "easy", "medium", "hard"];
+const DIFFICULTY_LEVELS = ["easy", "medium", "hard"];
 const SUBJECT_CONFIG = {
   mathematics: {
     topics: ["numbers", "algebra", "geometry", "statistics"],
@@ -41,17 +38,13 @@ export default function QuizInterface({
   onTestComplete: (report: TestReport) => void;
 }) {
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
-  const [timeRemaining, setTimeRemaining] = useState(
-    TEST_DURATION_MINUTES * 60
-  );
+  const [timeRemaining, setTimeRemaining] = useState(TEST_DURATION_MINUTES * 60);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [showHint, setShowHint] = useState(false);
   const [showExplanation, setShowExplanation] = useState(false);
-  const [currentTopic, setCurrentTopic] = useState(
-    SUBJECT_CONFIG[subject].topics[0]
-  );
-  const [consecutiveCorrect, setConsecutiveCorrect] = useState(0);
-  const [difficultyLevel, setDifficultyLevel] = useState(0);
+  const [currentTopic, setCurrentTopic] = useState(SUBJECT_CONFIG[subject].topics[0]);
+  const [currentDifficultyIndex, setCurrentDifficultyIndex] = useState(0); // Tracks current difficulty level
+  const [correctStreak, setCorrectStreak] = useState(0); // Tracks consecutive correct answers
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [testCompleted, setTestCompleted] = useState(false);
@@ -79,6 +72,7 @@ export default function QuizInterface({
     hintUsed: false,
   });
 
+  // Update hints used in the test report
   useEffect(() => {
     if (showHint && !currentQuestionStats.hintUsed) {
       setTestReport((prev) => ({ ...prev, hintsUsed: prev.hintsUsed + 1 }));
@@ -86,6 +80,7 @@ export default function QuizInterface({
     }
   }, [showHint, currentQuestionStats.hintUsed]);
 
+  // Fetch the next question based on current topic and difficulty
   const fetchNextQuestion = useCallback(async () => {
     if (!isMounted.current || testCompleted) return;
 
@@ -103,10 +98,7 @@ export default function QuizInterface({
     abortController.current = new AbortController();
 
     try {
-      const level =
-        DIFFICULTY_LEVELS[
-          Math.min(difficultyLevel, DIFFICULTY_LEVELS.length - 1)
-        ];
+      const level = DIFFICULTY_LEVELS[currentDifficultyIndex];
       const response = await fetch("/api/generate-question", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -116,9 +108,7 @@ export default function QuizInterface({
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(
-          errorData.error || `HTTP error! status: ${response.status}`
-        );
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
@@ -129,17 +119,16 @@ export default function QuizInterface({
       }));
     } catch (error: any) {
       if (isMounted.current && error.name !== "AbortError") {
-        setError(
-          error instanceof Error ? error.message : "Failed to load question"
-        );
+        setError(error instanceof Error ? error.message : "Failed to load question");
       }
     } finally {
       if (isMounted.current) {
         setIsLoading(false);
       }
     }
-  }, [subject, grade, currentTopic, difficultyLevel, testCompleted]);
+  }, [subject, grade, currentTopic, currentDifficultyIndex, testCompleted]);
 
+  // Initialize the quiz and fetch the first question
   useEffect(() => {
     isMounted.current = true;
     fetchNextQuestion();
@@ -151,6 +140,7 @@ export default function QuizInterface({
     };
   }, []);
 
+  // Timer for the test duration
   useEffect(() => {
     const timer =
       timeRemaining > 0 &&
@@ -165,20 +155,13 @@ export default function QuizInterface({
     };
   }, [timeRemaining, testCompleted]);
 
+  // Handle answer submission
   const handleSubmit = useCallback(() => {
-    if (
-      !currentQuestion ||
-      testCompleted ||
-      isAnswerProcessing ||
-      !selectedAnswer
-    )
-      return;
+    if (!currentQuestion || testCompleted || isAnswerProcessing || !selectedAnswer) return;
 
     setIsAnswerProcessing(true);
     const isCorrect = selectedAnswer === currentQuestion.correctAnswer;
-    const timeSpent = Math.floor(
-      (Date.now() - questionStartTime.current) / 1000
-    );
+    const timeSpent = Math.floor((Date.now() - questionStartTime.current) / 1000);
 
     setCurrentQuestionStats((prev) => ({
       attempts: prev.attempts + 1,
@@ -186,7 +169,7 @@ export default function QuizInterface({
     }));
 
     if (isCorrect) {
-      // Inside handleSubmit function
+      // Update test report
       setTestReport((prev) => {
         const newStats = { ...prev.topicStats };
         const topicStat = newStats[currentTopic] || {
@@ -198,19 +181,18 @@ export default function QuizInterface({
         };
 
         topicStat.total++;
-        topicStat.correct += isCorrect ? 1 : 0;
+        topicStat.correct++;
         topicStat.totalAttempts += currentQuestionStats.attempts + 1;
         topicStat.totalTime += timeSpent;
         topicStat.hintsUsed += currentQuestionStats.hintUsed ? 1 : 0;
 
         return {
           ...prev,
-          correctAnswers: prev.correctAnswers + (isCorrect ? 1 : 0),
+          correctAnswers: prev.correctAnswers + 1,
           hintsUsed: prev.hintsUsed + (currentQuestionStats.hintUsed ? 1 : 0),
           totalAttempts: prev.totalAttempts + currentQuestionStats.attempts + 1,
           timeTaken: prev.timeTaken + timeSpent,
-          averageTimePerQuestion:
-            (prev.timeTaken + timeSpent) / (prev.totalQuestions + 1),
+          averageTimePerQuestion: (prev.timeTaken + timeSpent) / (prev.totalQuestions + 1),
           questionsData: [
             ...prev.questionsData,
             {
@@ -219,28 +201,31 @@ export default function QuizInterface({
               attemptsNeeded: currentQuestionStats.attempts + 1,
               hintUsed: currentQuestionStats.hintUsed,
               timeTaken: timeSpent,
-              correct: isCorrect,
-              difficulty: DIFFICULTY_LEVELS[difficultyLevel],
+              correct: true,
+              difficulty: DIFFICULTY_LEVELS[currentDifficultyIndex],
             },
           ],
           topicStats: { ...newStats, [currentTopic]: topicStat },
         };
       });
 
-      setConsecutiveCorrect((prev) => {
-        const newCount = prev + 1;
-        if (newCount >= CONSECUTIVE_TOPIC_CHANGE) {
-          setCurrentTopic((prevTopic) => {
-            const topics = SUBJECT_CONFIG[subject].topics;
-            const nextIndex = (topics.indexOf(prevTopic) + 1) % topics.length;
-            return topics[nextIndex];
-          });
-          setDifficultyLevel(0);
-          return 0;
+      // Handle difficulty progression
+      const newStreak = correctStreak + 1;
+      if (newStreak >= 5) {
+        if (currentDifficultyIndex < DIFFICULTY_LEVELS.length - 1) {
+          // Move to next difficulty level
+          setCurrentDifficultyIndex((prev) => prev + 1);
+        } else {
+          // Move to next topic
+          const topics = SUBJECT_CONFIG[subject].topics;
+          const nextIndex = (topics.indexOf(currentTopic) + 1) % topics.length;
+          setCurrentTopic(topics[nextIndex]);
+          setCurrentDifficultyIndex(0);
         }
-        setDifficultyLevel(Math.min(newCount, DIFFICULTY_LEVELS.length - 1));
-        return newCount;
-      });
+        setCorrectStreak(0);
+      } else {
+        setCorrectStreak(newStreak);
+      }
 
       setShowExplanation(true);
     } else {
@@ -248,6 +233,8 @@ export default function QuizInterface({
       if (newAttempts === 1) {
         setShowHint(true);
       } else {
+        // Reset streak on final incorrect attempt
+        setCorrectStreak(0);
         setTestReport((prev) => {
           const newStats = { ...prev.topicStats };
           const topicStat = newStats[currentTopic] || {
@@ -268,8 +255,7 @@ export default function QuizInterface({
             hintsUsed: prev.hintsUsed + (currentQuestionStats.hintUsed ? 1 : 0),
             totalAttempts: prev.totalAttempts + newAttempts,
             timeTaken: prev.timeTaken + timeSpent,
-            averageTimePerQuestion:
-              (prev.timeTaken + timeSpent) / (prev.totalQuestions + 1),
+            averageTimePerQuestion: (prev.timeTaken + timeSpent) / (prev.totalQuestions + 1),
             questionsData: [
               ...prev.questionsData,
               {
@@ -279,7 +265,7 @@ export default function QuizInterface({
                 hintUsed: currentQuestionStats.hintUsed,
                 timeTaken: timeSpent,
                 correct: false,
-                difficulty: DIFFICULTY_LEVELS[difficultyLevel],
+                difficulty: DIFFICULTY_LEVELS[currentDifficultyIndex],
               },
             ],
             topicStats: { ...newStats, [currentTopic]: topicStat },
@@ -297,13 +283,17 @@ export default function QuizInterface({
     isAnswerProcessing,
     selectedAnswer,
     currentQuestionStats,
+    currentDifficultyIndex,
+    correctStreak,
   ]);
 
+  // Handle moving to the next question
   const handleNextQuestion = useCallback(() => {
     setShowExplanation(false);
     fetchNextQuestion();
   }, [fetchNextQuestion]);
 
+  // Notify parent component when test is completed
   useEffect(() => {
     if (testCompleted) {
       onTestComplete(testReport);
@@ -315,12 +305,11 @@ export default function QuizInterface({
       <div className="lg:col-span-2">
         <div className="mb-4 flex justify-between items-center">
           <div className="text-lg font-bold">
-            Time: {Math.floor(timeRemaining / 60)}:
-            {String(timeRemaining % 60).padStart(2, "0")}
+            Time: {Math.floor(timeRemaining / 60)}:{String(timeRemaining % 60).padStart(2, "0")}
           </div>
           <div className="text-lg">
-            {SUBJECT_CONFIG[subject].displayNames[currentTopic]}
-            (Level: {DIFFICULTY_LEVELS[difficultyLevel].replace("_", " ")})
+            {SUBJECT_CONFIG[subject].displayNames[currentTopic]} (Level:{" "}
+            {DIFFICULTY_LEVELS[currentDifficultyIndex].replace("_", " ")})
           </div>
         </div>
 
@@ -345,9 +334,7 @@ export default function QuizInterface({
             <Card className="p-6">
               <h2
                 className="text-xl mb-4"
-                dangerouslySetInnerHTML={{
-                  __html: currentQuestion.questionText,
-                }}
+                dangerouslySetInnerHTML={{ __html: currentQuestion.questionText }}
               />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {currentQuestion.options.map((option) => (
@@ -384,10 +371,7 @@ export default function QuizInterface({
                   </Button>
                   {selectedAnswer && (
                     <>
-                      <Button
-                        onClick={handleSubmit}
-                        disabled={isAnswerProcessing}
-                      >
+                      <Button onClick={handleSubmit} disabled={isAnswerProcessing}>
                         Submit Answer
                       </Button>
                       <Button
@@ -406,9 +390,7 @@ export default function QuizInterface({
                 <Alert className="mt-4">
                   <AlertDescription>
                     <strong>Hint:</strong>{" "}
-                    <span
-                      dangerouslySetInnerHTML={{ __html: currentQuestion.hint }}
-                    />
+                    <span dangerouslySetInnerHTML={{ __html: currentQuestion.hint }} />
                   </AlertDescription>
                 </Alert>
               )}
@@ -417,11 +399,7 @@ export default function QuizInterface({
                 <Alert className="mt-4">
                   <AlertDescription>
                     <strong>Explanation:</strong>{" "}
-                    <div
-                      dangerouslySetInnerHTML={{
-                        __html: currentQuestion.explanation,
-                      }}
-                    />
+                    <div dangerouslySetInnerHTML={{ __html: currentQuestion.explanation }} />
                     <Button className="mt-2" onClick={handleNextQuestion}>
                       Continue
                     </Button>
