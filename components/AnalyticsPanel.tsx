@@ -20,7 +20,6 @@ export default function AnalyticsPanel({ testReport }: AnalyticsPanelProps) {
     })
   );
 
-  // Calculate revision needed topics with difficulty levels
   const revisionMap = testReport.questionsData
     .filter((q) => !q.correct)
     .reduce((acc, q) => {

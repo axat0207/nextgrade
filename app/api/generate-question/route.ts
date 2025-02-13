@@ -25,7 +25,7 @@ const requestSchema = z.object({
   subject: z.enum(["mathematics", "english"]),
   grade: z.number().min(1).max(12),
   topic: z.string(),
-  level: z.enum(["very_easy", "easy", "medium", "hard"]),
+  level: z.enum([ "easy", "medium", "hard"]),
 });
 
 // Global cache for used questions
@@ -97,6 +97,8 @@ export async function POST(req: Request) {
     Requirements:
     - Do not use LaTeX delimiters (\\( and \\))
     - Use × instead of * for multiplication
+    - Ensure all four options are unique and distinct
+    - The correct answer must exactly match one of the provided options
     - Keep mathematical expressions simple and readable
     - Provide clear, step-by-step explanations
     
@@ -173,7 +175,7 @@ export async function POST(req: Request) {
     console.log({ questionData });
     return NextResponse.json(questionData);
   } catch (error) {
-    console.log({error});
+    console.log({ error });
     return NextResponse.json(
       { error: "An unexpected error occurred" },
       { status: 500 }
@@ -198,6 +200,7 @@ function validateQuestion(question: any): question is Question {
     requiredFields.every((field) => question[field]) &&
     Array.isArray(question.options) &&
     question.options.length === 4 &&
+    new Set(question.options).size === 4 && // Ensure all options are unique
     question.options.includes(question.correctAnswer) &&
     typeof question.grade === "number" &&
     question.questionText.length > 0 &&
