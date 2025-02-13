@@ -56,32 +56,33 @@ export default function AnalyticsPanel({ testReport }: AnalyticsPanelProps) {
       <div className="mb-6">
         <h3 className="font-medium mb-2">Topic Performance</h3>
         <BarChart
-      xAxis={[{ 
-        scaleType: "band", 
-        data: topicStats.map((t) => t.topic),
-        tickLabelStyle: {
-          angle: 0,
-          textAnchor: 'middle',
-        }
-      }]}
-      series={[
-        { 
-          data: topicStats.map((t) => t.accuracy), 
-          label: "Accuracy (%)",
-          
-        },
-        { 
-          data: topicStats.map((t) => t.hintsUsed), 
-          label: "Hints Used",
-        },
-        {
-          data: topicStats.map((t) => incorrectCounts[t.topic] || 0),
-          label: "Incorrect Questions",
-        },
-      ]}
-      height={250}
-      margin={{ left: 50, right: 50, top: 80, bottom: 30 }}
-    />
+          xAxis={[
+            {
+              scaleType: "band",
+              data: topicStats.map((t) => t.topic),
+              tickLabelStyle: {
+                angle: 0,
+                textAnchor: "middle",
+              },
+            },
+          ]}
+          series={[
+            {
+              data: topicStats.map((t) => t.accuracy),
+              label: "Accuracy (%)",
+            },
+            {
+              data: topicStats.map((t) => t.hintsUsed),
+              label: "Hints Used",
+            },
+            {
+              data: topicStats.map((t) => incorrectCounts[t.topic] || 0),
+              label: "Incorrect Questions",
+            },
+          ]}
+          height={250}
+          margin={{ left: 50, right: 50, top: 80, bottom: 30 }}
+        />
       </div>
 
       <div className="mb-6">

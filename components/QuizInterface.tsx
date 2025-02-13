@@ -38,11 +38,15 @@ export default function QuizInterface({
   onTestComplete: (report: TestReport) => void;
 }) {
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
-  const [timeRemaining, setTimeRemaining] = useState(TEST_DURATION_MINUTES * 60);
+  const [timeRemaining, setTimeRemaining] = useState(
+    TEST_DURATION_MINUTES * 60
+  );
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [showHint, setShowHint] = useState(false);
   const [showExplanation, setShowExplanation] = useState(false);
-  const [currentTopic, setCurrentTopic] = useState(SUBJECT_CONFIG[subject].topics[0]);
+  const [currentTopic, setCurrentTopic] = useState(
+    SUBJECT_CONFIG[subject].topics[0]
+  );
   const [currentDifficultyIndex, setCurrentDifficultyIndex] = useState(0); // Tracks current difficulty level
   const [correctStreak, setCorrectStreak] = useState(0); // Tracks consecutive correct answers
   const [isLoading, setIsLoading] = useState(true);
@@ -108,7 +112,9 @@ export default function QuizInterface({
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+        throw new Error(
+          errorData.error || `HTTP error! status: ${response.status}`
+        );
       }
 
       const data = await response.json();
@@ -119,7 +125,9 @@ export default function QuizInterface({
       }));
     } catch (error: any) {
       if (isMounted.current && error.name !== "AbortError") {
-        setError(error instanceof Error ? error.message : "Failed to load question");
+        setError(
+          error instanceof Error ? error.message : "Failed to load question"
+        );
       }
     } finally {
       if (isMounted.current) {
@@ -157,11 +165,19 @@ export default function QuizInterface({
 
   // Handle answer submission
   const handleSubmit = useCallback(() => {
-    if (!currentQuestion || testCompleted || isAnswerProcessing || !selectedAnswer) return;
+    if (
+      !currentQuestion ||
+      testCompleted ||
+      isAnswerProcessing ||
+      !selectedAnswer
+    )
+      return;
 
     setIsAnswerProcessing(true);
     const isCorrect = selectedAnswer === currentQuestion.correctAnswer;
-    const timeSpent = Math.floor((Date.now() - questionStartTime.current) / 1000);
+    const timeSpent = Math.floor(
+      (Date.now() - questionStartTime.current) / 1000
+    );
 
     setCurrentQuestionStats((prev) => ({
       attempts: prev.attempts + 1,
@@ -192,7 +208,8 @@ export default function QuizInterface({
           hintsUsed: prev.hintsUsed + (currentQuestionStats.hintUsed ? 1 : 0),
           totalAttempts: prev.totalAttempts + currentQuestionStats.attempts + 1,
           timeTaken: prev.timeTaken + timeSpent,
-          averageTimePerQuestion: (prev.timeTaken + timeSpent) / (prev.totalQuestions + 1),
+          averageTimePerQuestion:
+            (prev.timeTaken + timeSpent) / (prev.totalQuestions + 1),
           questionsData: [
             ...prev.questionsData,
             {
@@ -255,7 +272,8 @@ export default function QuizInterface({
             hintsUsed: prev.hintsUsed + (currentQuestionStats.hintUsed ? 1 : 0),
             totalAttempts: prev.totalAttempts + newAttempts,
             timeTaken: prev.timeTaken + timeSpent,
-            averageTimePerQuestion: (prev.timeTaken + timeSpent) / (prev.totalQuestions + 1),
+            averageTimePerQuestion:
+              (prev.timeTaken + timeSpent) / (prev.totalQuestions + 1),
             questionsData: [
               ...prev.questionsData,
               {
@@ -305,7 +323,8 @@ export default function QuizInterface({
       <div className="lg:col-span-2">
         <div className="mb-4 flex justify-between items-center">
           <div className="text-lg font-bold">
-            Time: {Math.floor(timeRemaining / 60)}:{String(timeRemaining % 60).padStart(2, "0")}
+            Time: {Math.floor(timeRemaining / 60)}:
+            {String(timeRemaining % 60).padStart(2, "0")}
           </div>
           <div className="text-lg">
             {SUBJECT_CONFIG[subject].displayNames[currentTopic]} (Level:{" "}
@@ -334,7 +353,9 @@ export default function QuizInterface({
             <Card className="p-6">
               <h2
                 className="text-xl mb-4"
-                dangerouslySetInnerHTML={{ __html: currentQuestion.questionText }}
+                dangerouslySetInnerHTML={{
+                  __html: currentQuestion.questionText,
+                }}
               />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {currentQuestion.options.map((option) => (
@@ -344,12 +365,12 @@ export default function QuizInterface({
                     variant={
                       showExplanation
                         ? option === currentQuestion.correctAnswer
-                          ? "default"
+                          ? "correct"
                           : option === selectedAnswer
                           ? "destructive"
                           : "outline"
                         : selectedAnswer === option
-                        ? "secondary"
+                        ? "default"
                         : "outline"
                     }
                     disabled={showExplanation}
@@ -371,7 +392,10 @@ export default function QuizInterface({
                   </Button>
                   {selectedAnswer && (
                     <>
-                      <Button onClick={handleSubmit} disabled={isAnswerProcessing}>
+                      <Button
+                        onClick={handleSubmit}
+                        disabled={isAnswerProcessing}
+                      >
                         Submit Answer
                       </Button>
                       <Button
@@ -390,7 +414,9 @@ export default function QuizInterface({
                 <Alert className="mt-4">
                   <AlertDescription>
                     <strong>Hint:</strong>{" "}
-                    <span dangerouslySetInnerHTML={{ __html: currentQuestion.hint }} />
+                    <span
+                      dangerouslySetInnerHTML={{ __html: currentQuestion.hint }}
+                    />
                   </AlertDescription>
                 </Alert>
               )}
@@ -399,7 +425,11 @@ export default function QuizInterface({
                 <Alert className="mt-4">
                   <AlertDescription>
                     <strong>Explanation:</strong>{" "}
-                    <div dangerouslySetInnerHTML={{ __html: currentQuestion.explanation }} />
+                    <div
+                      dangerouslySetInnerHTML={{
+                        __html: currentQuestion.explanation,
+                      }}
+                    />
                     <Button className="mt-2" onClick={handleNextQuestion}>
                       Continue
                     </Button>
